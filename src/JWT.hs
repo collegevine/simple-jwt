@@ -11,10 +11,13 @@ module JWT(
     buildSimpleJWT
 ) where
 
+import Prelude hiding (exp)
 import Control.Lens (Lens', view)
 import Control.Monad.Reader (MonadReader)
+import Control.Monad.Trans (liftIO, MonadIO)
 import Crypto.Hash.Algorithms (SHA256)
 import Crypto.MAC.HMAC (HMAC(..), hmac)
+import Data.Time.Clock.POSIX
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64
@@ -41,10 +44,10 @@ class TokenSupport r where
     envISS :: Lens' r String
     envAUD :: Lens' r  String
 
-buildSimpleJWT :: (ToJSON a) => 
+buildSimpleJWT :: (MonadIO m, MonadReader r m, TokenSupport r, ToJSON a) => 
     a -> 
     String -> 
-    ContextM a String
+    m Token
 buildSimpleJWT payload sub' = do
     iss' <- view envISS
     aud' <- view envAUD
