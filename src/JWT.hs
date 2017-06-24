@@ -3,8 +3,12 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
 module JWT(
+    TokenSupport(..),
+    Token(..),
+    TokenInfo(..),
     createJWT,
-    decodeJWT
+    decodeJWT,
+    buildSimpleJWT
 ) where
 
 import Control.Lens (Lens', view)
@@ -34,9 +38,32 @@ data TokenInfo a = TokenInfo {
 
 class TokenSupport r where
     secret :: Lens' r String
+    envISS :: Lens' r String
+    envAUD :: Lens' r  String
+
+buildSimpleJWT :: (ToJSON a) => 
+    a -> 
+    String -> 
+    ContextM a String
+buildSimpleJWT payload sub' = do
+    iss' <- view envISS
+    aud' <- view envAUD
+    now <- liftIO $ round <$> getPOSIXTime
+    let ti = TokenInfo {
+        iss = iss',
+        sub = sub',
+        aud = aud',
+        exp = now + 36000, -- good for an hour
+        iat = now,
+        payload = Just payload
+    }
+    createJWT ti
+
 
 -- |Create a JWT
-createJWT :: (MonadReader r m, TokenSupport r, ToJSON a) => TokenInfo a -> m Token
+createJWT :: (MonadReader r m, TokenSupport r, ToJSON a) => 
+    TokenInfo a -> 
+    m Token
 createJWT inf = do
     secret <- B64.decodeLenient . B.pack <$> view secret
     let header = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
@@ -45,7 +72,9 @@ createJWT inf = do
     return . Token . T.pack . B.unpack $ header<>"."<>payload<>"."<>sig
 
 -- |Decode and verify a JWT, decoding app_metadata to the specified type
-decodeJWT :: (MonadReader r m, TokenSupport r, FromJSON a) => Token -> m (Maybe (TokenInfo a))
+decodeJWT :: (MonadReader r m, TokenSupport r, FromJSON a) => 
+    Token -> 
+    m (Maybe (TokenInfo a))
 decodeJWT tok = do
     secret <- B64.decodeLenient . B.pack <$> view secret
     case T.splitOn "." (getToken tok) of
