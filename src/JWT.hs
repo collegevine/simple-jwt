@@ -30,6 +30,15 @@ import GHC.Generics
 newtype Token = Token {getToken :: T.Text}
     deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
+newtype Secret = Secret {getSecret :: String}
+    deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+newtype ISS = ISS {getISS:: String}
+    deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+newtype AUD = AUD {getAUD :: String}
+    deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
 data TokenInfo a = TokenInfo {
     iss :: String,
     sub :: String,
@@ -40,17 +49,17 @@ data TokenInfo a = TokenInfo {
 } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 class TokenSupport r where
-    secret :: Lens' r String
-    envISS :: Lens' r String
-    envAUD :: Lens' r  String
+    secret :: Lens' r Secret
+    envISS :: Lens' r ISS
+    envAUD :: Lens' r AUD
 
 buildSimpleJWT :: (MonadIO m, MonadReader r m, TokenSupport r, ToJSON a) => 
     a -> 
     String -> 
     m Token
 buildSimpleJWT payload sub' = do
-    iss' <- view envISS
-    aud' <- view envAUD
+    iss' <- getISS <$> view envISS
+    aud' <- getAUD <$> view envAUD
     now <- liftIO $ round <$> getPOSIXTime
     let ti = TokenInfo {
         iss = iss',
@@ -68,7 +77,7 @@ createJWT :: (MonadReader r m, TokenSupport r, ToJSON a) =>
     TokenInfo a -> 
     m Token
 createJWT inf = do
-    secret <- B64.decodeLenient . B.pack <$> view secret
+    secret <- B64.decodeLenient . B.pack . getSecret <$> view secret
     let header = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
     let payload = B.filter (/= '=') . B64.encode . BL.toStrict $ encode inf
     let sig = hmac' secret $ header<>"."<> payload
@@ -79,7 +88,7 @@ decodeJWT :: (MonadReader r m, TokenSupport r, FromJSON a) =>
     Token -> 
     m (Maybe (TokenInfo a))
 decodeJWT tok = do
-    secret <- B64.decodeLenient . B.pack <$> view secret
+    secret <- B64.decodeLenient . B.pack . getSecret <$> view secret
     case T.splitOn "." (getToken tok) of
         [header,body,sig] -> return $ do
             let sig' = T.pack . B.unpack . hmac' secret . B.pack $ T.unpack (header<>"."<>body)
