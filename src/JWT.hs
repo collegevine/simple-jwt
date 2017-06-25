@@ -6,6 +6,9 @@ module JWT(
     TokenSupport(..),
     Token(..),
     TokenInfo(..),
+    Secret(..),
+    ISS(..),
+    AUD(..),
     createJWT,
     decodeJWT,
     buildSimpleJWT
